@@ -32,7 +32,7 @@ struct PacketHeader {
 int main(int argc, char *argv[]) {
 	int wStart = 0;
 	int wSize = atoi(argv[2]);
-	vector<std::chrono::time_point<std::chrono::system_clock>> wTime;
+	std::vector<std::chrono::time_point<std::chrono::system_clock>> wTime;
 	int time_idx = 0; // points to time of start of window
 
 	std::ifstream is{argv[1], std::ios::binary | std::ios::ate};
@@ -76,6 +76,9 @@ int main(int argc, char *argv[]) {
 		perror("failed to create socket\n");
 		abort();
     }
+    char buffer[PACKET_SIZE];
+    memset(buffer, '\0', PACKET_SIZE);
+    strcpy(buffer, "abc");
 
     if ((numbytes = sendto(sockfd, buffer, PACKET_SIZE, 0,
              p->ai_addr, p->ai_addrlen)) == -1) {
