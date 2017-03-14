@@ -69,6 +69,12 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
+        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+            close(sockfd);
+            perror("client:connect");
+            continue;
+        }
+
         break;
     }
 
@@ -80,8 +86,7 @@ int main(int argc, char *argv[]) {
     memset(buffer, '\0', PACKET_SIZE);
     strcpy(buffer, "abc");
 
-    if ((numbytes = sendto(sockfd, buffer, PACKET_SIZE, 0,
-             p->ai_addr, p->ai_addrlen)) == -1) {
+    if ((numbytes = send(sockfd, buffer, PACKET_SIZE, 0) == -1)) {
         perror("sendto");
         exit(1);
     }
