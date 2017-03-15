@@ -18,6 +18,7 @@
 #include <vector>
 #include <chrono>
 #include <ctime>
+#include <deque>
 
 #define CHUNCK_SIZE 3
 #define PACKET_SIZE 1472
@@ -44,20 +45,42 @@ void header_to_char(PacketHeader* header, char * buf) {
 	int_to_char(buf, header->checksum, i);
 }
 
-bool setWindow(std::vector<char*>& window, int& wStart, int size, 
-	std::string & file_str, int& file_idx, int& seqNum, int wSize) {
+unsigned int char_to_int(char * buf, int &i) {
+	unsigned int ret;
+	ret += buf[i++] << 24;
+	ret += buf[i++] << 16;
+	ret += buf[i++] << 8;
+	ret += buf[i++];
+	return ret;
+}
+
+void parse_data(PacketHeader * header, char * buf) {
+	int i = 0;
+	header->type = char_to_int(buf, i);
+	header->seqNum = char_to_int(buf, i);
+	header->length = char_to_int(buf, i);
+	header->checksum = char_to_int(buf, i);
+}
+
+void setWindow(std::deque<char*>& window, int size, 
+	std::string & file_str, int& file_idx, int& seqNum) {
 	string data_str;
-	bool isEnd = false;
+	// bool isEnd = false;
 
 	for (int i = 0; i < size; i++) {
+		// end of file
+		if (file_idx >= file_str.size()) {
+			return;
+		}
+
 		if (file_idx + CHUNCK_SIZE < file_str.size()) {
 			data_str = file_str.substr(file_idx, CHUNCK_SIZE);
 		} else {
 			data_str = file_str.substr(file_idx);
-			isEnd = true; 
+			// isEnd = true; 
 		}
 
-		file_idx += CHUNCK_SIZE;
+		file_idx += data_str.size();
 
 		PacketHeader header;
 		header.type = 2; // Data
@@ -65,41 +88,50 @@ bool setWindow(std::vector<char*>& window, int& wStart, int size,
 		header.length = data_str.size();
 		header.checksum = crc32(data_str.c_str(), data_str.size());
 
-		memset(window[wStart], '/0', PACKET_SIZE);
-		header_to_char(&header, window[wStart]);
+		
+		// delete as soon as recv
+			// delete [] window[0];
+			// window.pop_front();
+
+
+		char * buf = new char [PACKET_SIZE];
+		memset(buf, '/0', PACKET_SIZE);
+		header_to_char(&header, buf);
 		// copy
-		for (int j = 0; j < CHUNCK_SIZE; j++) {
-			window[wStart][12 + j] = data_str[j];
+		for (int j = 0; j < data_str.size(); j++) {
+			buf[12 + j] = data_str[j];
 		}
 
-		wStart = (wStart + 1) % wSize;
+		window.push_back(buf);
 	}
-	return isEnd;
 }
 
-void sendWindow(std::vector<char*>& window, 
-	std::vector<std::chrono::time_point<std::chrono::system_clock>>& wTime, int sockfd
-	int wStart, int num_pack) { 
-	for (unsigned i= 0; i < window.size(); i++) {
-
-		if ((numbytes = send(sockfd, buffer, PACKET_SIZE, 0) == -1)) {
+// start: starting point in window to send packets
+void sendWindow(std::deque<char*>& window, 
+	std::deque<std::chrono::time_point<std::chrono::system_clock>>& wTime, int sockfd
+	int start) { 
+	for (int i = start; i < window.size(); i++) {
+		if ((numbytes = send(sockfd, window[i], PACKET_SIZE, 0) == -1)) {
 			perror("send");
 			exit(1);
 		}
+		wTime.push_back(now());
 	}
 }
+
+
 int main(int argc, char *argv[]) {
-	int wStart = 0;
+	// int wStart = 0;
 	int wSize = atoi(argv[2]);
 	// int lowSeqNum = 0;
 	int seqNum = 0; // next seqNum to be added
 	int file_idx = 0;
-	std::vector<std::chrono::time_point<std::chrono::system_clock>> wTime;
-	std::vector<char*> window(wSize);
-	for (int i = 0; i < wSize; i++) {
-		window[i] = new char [PACKET_SIZE];
-	}
-	int time_idx = 0; // points to time of start of window
+	std::deque<std::chrono::time_point<std::chrono::system_clock>> wTime;
+	std::deque<char*> window(wSize);
+	// for (int i = 0; i < wSize; i++) {
+	// 	window[i] = new char [PACKET_SIZE];
+	// }
+	// int time_idx = 0; // points to time of start of window
 
 	std::ifstream is{argv[1], std::ios::binary | std::ios::ate};
 	if (!is) {
@@ -141,6 +173,9 @@ int main(int argc, char *argv[]) {
 			continue;
 		}
 
+		// non-blocking
+		fcntl(sockfd, F_SETFL, O_NONBLOCK);
+
 		if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
 			close(sockfd);
 			perror("client:connect");
@@ -154,9 +189,9 @@ int main(int argc, char *argv[]) {
 		perror("failed to create socket\n");
 		abort();
 	}
-	char buffer[PACKET_SIZE];
-	memset(buffer, '\0', PACKET_SIZE);
-	strcpy(buffer, "abc");
+	// char buffer[PACKET_SIZE];
+	// memset(buffer, '\0', PACKET_SIZE);
+	// strcpy(buffer, "abc");
 
 	// if ((numbytes = send(sockfd, buffer, PACKET_SIZE, 0) == -1)) {
 	//     perror("sendto");
@@ -167,13 +202,27 @@ int main(int argc, char *argv[]) {
 
 	sendWindow(window, wTime, sockfd, 0, wSize);
 
+	bool endFile = false;
+	char buffer[PACKET_SIZE];
+	memset(buffer, '\0', PACKET_SIZE);
+
 	while (true) {
+		numbytes = recv(sockfd, buffer, PACKET_SIZE , 0);
+		if (numbytes == -1) {
+			// perror("recvfrom");
+			// exit(1);
+		} else {
+			PacketHeader header;
+			parse_data(header, buffer);
+			if ()
+		}
+		
 
 	}
 
 	freeaddrinfo(servinfo);
 
-	for (int i = 0; i < wSize; i++) {
+	for (int i = 0; i < window.size(); i++) {
 		delete [] window[i];
 	}
 	return 0;
