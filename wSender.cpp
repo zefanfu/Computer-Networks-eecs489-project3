@@ -10,6 +10,8 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include <iostream>
 #include <chrono>
 #include <ctime>
@@ -19,6 +21,9 @@
 #include <chrono>
 #include <ctime>
 #include <deque>
+#include <assert.h>
+
+#include "crc32.h"
 
 #define CHUNCK_SIZE 3
 #define PACKET_SIZE 1472
@@ -62,9 +67,10 @@ void parse_data(PacketHeader * header, char * buf) {
 	header->checksum = char_to_int(buf, i);
 }
 
+// put at most size packets to the window
 void setWindow(std::deque<char*>& window, int size, 
 	std::string & file_str, int& file_idx, int& seqNum) {
-	string data_str;
+	std::string data_str;
 	// bool isEnd = false;
 
 	for (int i = 0; i < size; i++) {
@@ -88,14 +94,8 @@ void setWindow(std::deque<char*>& window, int size,
 		header.length = data_str.size();
 		header.checksum = crc32(data_str.c_str(), data_str.size());
 
-		
-		// delete as soon as recv
-			// delete [] window[0];
-			// window.pop_front();
-
-
 		char * buf = new char [PACKET_SIZE];
-		memset(buf, '/0', PACKET_SIZE);
+		memset(buf, '\0', PACKET_SIZE);
 		header_to_char(&header, buf);
 		// copy
 		for (int j = 0; j < data_str.size(); j++) {
@@ -107,15 +107,16 @@ void setWindow(std::deque<char*>& window, int size,
 }
 
 // start: starting point in window to send packets
-void sendWindow(std::deque<char*>& window, 
-	std::deque<std::chrono::time_point<std::chrono::system_clock>>& wTime, int sockfd
-	int start) { 
+void sendWindow(std::deque<char*>& window, std::deque<std::chrono::time_point<std::chrono::system_clock>>& wTime, 
+	int sockfd, int start) {
+
+	int numbytes;
 	for (int i = start; i < window.size(); i++) {
 		if ((numbytes = send(sockfd, window[i], PACKET_SIZE, 0) == -1)) {
 			perror("send");
 			exit(1);
 		}
-		wTime.push_back(now());
+		wTime.push_back(std::chrono::high_resolution_clock::now());
 	}
 }
 
@@ -123,15 +124,11 @@ void sendWindow(std::deque<char*>& window,
 int main(int argc, char *argv[]) {
 	// int wStart = 0;
 	int wSize = atoi(argv[2]);
-	// int lowSeqNum = 0;
+	int lowSeqNum = 0;
 	int seqNum = 0; // next seqNum to be added
 	int file_idx = 0;
 	std::deque<std::chrono::time_point<std::chrono::system_clock>> wTime;
 	std::deque<char*> window(wSize);
-	// for (int i = 0; i < wSize; i++) {
-	// 	window[i] = new char [PACKET_SIZE];
-	// }
-	// int time_idx = 0; // points to time of start of window
 
 	std::ifstream is{argv[1], std::ios::binary | std::ios::ate};
 	if (!is) {
@@ -143,13 +140,7 @@ int main(int argc, char *argv[]) {
 	std::string file_str(size, '\0'); // construct string to stream size
 	is.seekg(0);
 	is.read(&file_str[0], size);
-	// std::cout << file_str << "\n";
-	// char buf[CHUNCK_SIZE + 1];
-	// for (int i = 0; i <= num_chunk; i++) {
-	// 	memset(buf, 0, CHUNCK_SIZE + 1);
-	// 	is.read(buf, CHUNCK_SIZE);
-	// 	is.
-	// }
+
 
 	int sockfd;
 	struct addrinfo hints, *servinfo, *p;
@@ -189,42 +180,70 @@ int main(int argc, char *argv[]) {
 		perror("failed to create socket\n");
 		abort();
 	}
-	// char buffer[PACKET_SIZE];
-	// memset(buffer, '\0', PACKET_SIZE);
-	// strcpy(buffer, "abc");
 
-	// if ((numbytes = send(sockfd, buffer, PACKET_SIZE, 0) == -1)) {
-	//     perror("sendto");
-	//     exit(1);
-	// }
 
-	setWindow(window, wStart, wSize, file_str, file_idx, seqNum, wSize);
+	setWindow(window, wSize, file_str, file_idx, seqNum);
 
-	sendWindow(window, wTime, sockfd, 0, wSize);
+	sendWindow(window, wTime, sockfd, 0);
 
-	bool endFile = false;
+	// bool endFile = false;
 	char buffer[PACKET_SIZE];
 	memset(buffer, '\0', PACKET_SIZE);
+	int ack_pack, old_size, add_size, start;
+	std::chrono::time_point<std::chrono::system_clock> current_time;
+	std::chrono::milliseconds msec(500);
+    std::chrono::duration<double> timeout(msec);
 
 	while (true) {
 		numbytes = recv(sockfd, buffer, PACKET_SIZE , 0);
 		if (numbytes == -1) {
-			// perror("recvfrom");
-			// exit(1);
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				continue; // try again
+			} else {
+				perror("recvfrom");
+				exit(1);
+			}
 		} else {
 			PacketHeader header;
-			parse_data(header, buffer);
-			if ()
-		}
-		
+			parse_data(&header, buffer);
+			if (header.type == 3) {
+				if (header.seqNum > lowSeqNum) {
+					ack_pack = header.seqNum - lowSeqNum;
 
+					// delete from window
+					for (int i = 0; i < ack_pack; i++) {
+						delete [] window[0];
+						window.pop_front();
+						wTime.pop_front();
+					}
+
+					old_size = window.size();
+					setWindow(window, ack_pack, file_str, file_idx, seqNum);
+					add_size = window.size() - old_size;
+					start = window.size() - add_size;
+
+					sendWindow(window, wTime, sockfd, start);
+
+					lowSeqNum = header.seqNum;
+				}
+			}
+		}
+
+
+		if (window.size() == 0) {
+			break;
+		}
+
+		assert(!wTime.empty());
+
+		current_time = std::chrono::high_resolution_clock::now();
+		if (current_time - wTime[0] >= timeout) {
+			sendWindow(window, wTime, sockfd, 0); // send the whole window
+		}
 	}
 
 	freeaddrinfo(servinfo);
 
-	for (int i = 0; i < window.size(); i++) {
-		delete [] window[i];
-	}
 	return 0;
 	
 }
