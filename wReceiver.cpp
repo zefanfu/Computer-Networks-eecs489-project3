@@ -10,6 +10,7 @@
 #include <netdb.h>
 #include <iostream>
 #include <fstream>
+#include <deque>
 
 #include "crc32.h"
 
@@ -22,6 +23,52 @@ struct PacketHeader {
 	unsigned int length;   // Length of data; 0 for ACK, START and END packets
 	unsigned int checksum; // 32-bit CRC
 };
+
+void int_to_char(char * buf, unsigned int value, int & i) {
+	buf[i++] = value >> 24;
+	buf[i++] = (value >> 16) & 0xff;
+	buf[i++] = (value >> 8) & 0xff;
+	buf[i++] = value & 0xff;
+}
+
+void header_to_char(PacketHeader* header, char * buf) {
+	int i = 0;
+	int_to_char(buf, header->type, i);
+	int_to_char(buf, header->seqNum, i);
+	int_to_char(buf, header->length, i);
+	int_to_char(buf, header->checksum, i);
+}
+
+unsigned int char_to_int(char * buf, int &i) {
+	unsigned int ret;
+	ret += buf[i++] << 24;
+	ret += buf[i++] << 16;
+	ret += buf[i++] << 8;
+	ret += buf[i++];
+	return ret;
+}
+
+void parse_header(PacketHeader * header, char * buf) {
+	int i = 0;
+	header->type = char_to_int(buf, i);
+	header->seqNum = char_to_int(buf, i);
+	header->length = char_to_int(buf, i);
+	header->checksum = char_to_int(buf, i);
+}
+
+void parse_packet(PacketHeader *header, char *buf, char *data) {
+	parse_header(header, buf);
+
+	if (header.length == 0) {
+		return;
+	}
+
+	buf += 16;
+	for (int i = 0; i < header.length; i++) {
+		*data++ = *buf++;
+	}
+}
+
 
 int main(int argc, char *argv[]) {
 	int sockfd;
@@ -78,33 +125,149 @@ int main(int argc, char *argv[]) {
 	// std::cout << buf << std::endl;
 
 
-	int num_file = 0;
+	int num_file = 1;
 	std::string filename;
 	while (true) {
-		filename = "FILE-" + to_string(num_file);
-		num_file++;
-
-		std::ofstream outfile (filename.c_str(),std::ofstream::binary);
-
-		char buffer[PACKET_SIZE];
-		memset(buffer, '\0', PACKET_SIZE);
+		char sbuf[PACKET_SIZE];
+		memset(sbuf, '\0', PACKET_SIZE);
 
 		// wait for START
 		addr_len = sizeof their_addr;
-		if ((numbytes = recvfrom(sockfd, buffer, MAXBUFLEN-1 , 0,
+		if ((numbytes = recvfrom(sockfd, sbuf, PACKET_SIZE , 0,
 			(struct sockaddr *)&their_addr, &addr_len)) == -1) {
 			perror("recvfrom");
 			exit(1);
 		}
 
-		PacketHeader header;
-		if ((numbytes = sendto(sockfd, argv[2], strlen(argv[2]), 0,
-			 p->ai_addr, p->ai_addrlen)) == -1) {
+		PacketHeader sheader;
+		parse_header(sheader, sbuf);
+
+		sheader.type = 3;
+		memset(sbuf, '\0', PACKET_SIZE);
+		header_to_char(sheader, sbuf);
+		// send ack of START
+		if ((numbytes = sendto(sockfd, sbuf, PACKET_SIZE, 0,
+			 (struct sockaddr *)&their_addr, &addr_len)) == -1) {
 			perror("talker: sendto");
 			exit(1);
 		}
 
+		// open new file
+		filename = "FILE-" + to_string(num_file);
+		num_file++;
+		std::ofstream outfile (filename.c_str(), std::ofstream::binary);
+
+
+		char dbuf[PACKET_SIZE]; // buffer to recv data packets
+		char abuf[PACKET_SIZE]; // buffer to send back acks
+		char data[CHUNCK_SIZE];
+		PacketHeader dheader; // header for data packets
+		PacketHeader aheader; // hedaer for ACKs
+		std::deque<char*> window;
+		int wSize = atoi(argv[3]);
+		int expSeqNum = 0; // expected seqnum;
+
+		// loop for recv data
 		while (true) {
+			memset(dbuf, '\0', PACKET_SIZE);
+			if ((numbytes = recvfrom(sockfd, dbuf, PACKET_SIZE , 0,
+			(struct sockaddr *)&their_addr, &addr_len)) == -1) {
+				perror("recvfrom");
+				exit(1);
+			}
+
+			memset(data, '\0', CHUNCK_SIZE);
+			parse_packet(dheader, dbuf, data);
+
+			if (dheader.type == 0) { // START
+				continue;
+			} else if (dheader.type = 1) { // END
+				aheader.type = 3;
+				aheader.seqNum = dheader.seqNum;
+				aheader.length = 0;
+				aheader.checksum = 0;
+				memset(abuf, '\0', PACKET_SIZE);
+				header_to_char(aheader, abuf);
+				// send ACKs
+				if ((numbytes = sendto(sockfd, abuf, PACKET_SIZE, 0,
+					(struct sockaddr *)&their_addr, &addr_len)) == -1) {
+					perror("talker: sendto");
+					exit(1);
+				}
+
+				break;
+			} else { // DATA
+
+
+
+				// if (dheader.seqNum == expSeqNum) {
+				// 	while (!window.empty() && window[0] != NULL) {
+				// 		outfile.write(data, dheader.length);
+				// 		delete [] window[0];
+				// 		window.pop_front();
+				// 		expSeqNum++;
+				// 	}
+				// } else if (dheader.seqNum > expSeqNum) {
+				// 	if (dheader.seqNum - expSeqNum >= wSize) { // keep window size
+				// 		continue;
+				// 	} else if (dheader.seqNum - expSeqNum >= window.size()) {
+				// 		for (int i = window.size(); i < dheader.seqNum - expSeqNum; i++) {
+				// 			window.push_back(NULL);
+				// 		}
+				// 		char newData = new char[CHUNCK_SIZE];
+				// 		// copy data into window
+				// 		for (int i = 0; i < dheader.length; i++) {
+				// 			newData[i] = data[i];
+				// 		}
+				// 		window.push_back(newData);
+				// 	} else {
+
+				// 	}
+				// } else {
+				// 	continue; // recv seqNum < expSeqNum
+				// }
+
+				if (dheader.seqNum < expSeqNum || dheader.seqNum >= expSeqNum + window.size()) {
+					continue;
+				}
+
+				int checksum = crc32(data, dheader.length);
+				if (dheader.checksum != checksum) {
+					continue;
+				}
+
+				for (int i = window.size(); i <= dheader.seqNum - expSeqNum; i++) {
+					window.push_back(NULL);
+				}
+
+				char newData = new char[CHUNCK_SIZE];
+				for (int i = 0; i < dheader.length; i++) {
+					newData[i] = data[i];
+				}
+				window[dheader.seqNum - expSeqNum] = newData;
+
+				if (dheader.seqNum == expSeqNum) { // write to file
+					while (!window.empty() && window[0] != NULL) {
+						outfile.write(data, dheader.length);
+						delete [] window[0];
+						window.pop_front();
+						expSeqNum++;
+					}
+				}
+
+				aheader.type = 3;
+				aheader.seqNum = expSeqNum;
+				aheader.length = 0;
+				aheader.checksum = 0;
+				memset(abuf, '\0', PACKET_SIZE);
+				header_to_char(aheader, abuf);
+				// send ACKs
+				if ((numbytes = sendto(sockfd, abuf, PACKET_SIZE, 0,
+					(struct sockaddr *)&their_addr, &addr_len)) == -1) {
+					perror("talker: sendto");
+					exit(1);
+				}
+			}
 
 		}
 

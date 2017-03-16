@@ -59,7 +59,7 @@ unsigned int char_to_int(char * buf, int &i) {
 	return ret;
 }
 
-void parse_data(PacketHeader * header, char * buf) {
+void parse_header(PacketHeader * header, char * buf) {
 	int i = 0;
 	header->type = char_to_int(buf, i);
 	header->seqNum = char_to_int(buf, i);
@@ -96,7 +96,7 @@ void setWindow(std::deque<char*>& window, int size,
 		header_to_char(&header, buf);
 		// copy
 		for (int j = 0; j < data_str.size(); j++) {
-			buf[12 + j] = data_str[j];
+			buf[16 + j] = data_str[j];
 		}
 
 		window.push_back(buf);
@@ -150,7 +150,7 @@ void sendConnection(int sockfd, int type) {
 				exit(1);
 			}
 		} else {
-			parse_data(&rheader, rbuf);
+			parse_header(&rheader, rbuf);
 			if (rheader.type == 3 && rheader.seqNum == 1000) { // random >>>>>>>>>>>>>>>>>>>>
 				break;
 			}
@@ -257,7 +257,7 @@ int main(int argc, char *argv[]) {
 			}
 		} else {
 			PacketHeader header;
-			parse_data(&header, buffer);
+			parse_header(&header, buffer);
 			if (header.type == 3) {
 				if (header.seqNum > lowSeqNum) {
 					ack_pack = header.seqNum - lowSeqNum; // # of acked packets
