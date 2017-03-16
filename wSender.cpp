@@ -88,10 +88,7 @@ void setWindow(std::deque<char*>& window, int size,
 
 		file_idx += data_str.size();
 
-		PacketHeader header;
-		header.type = 2; // Data
-		header.seqNum = seqNum++;
-		header.length = data_str.size();
+		 
 		header.checksum = crc32(data_str.c_str(), data_str.size());
 
 		char * buf = new char [PACKET_SIZE];
@@ -120,6 +117,58 @@ void sendWindow(std::deque<char*>& window, std::deque<std::chrono::time_point<st
 	}
 }
 
+void sendConnection(int sockfd, int type) {
+	PacketHeader header;
+	header.type = type;
+	header.seqNum = 1000; // random >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+	header.length = 0;
+	header.checksum = 0;
+
+	char buf[PACKET_SIZE];
+	memset(buf, '\0', PACKET_SIZE);
+	header_to_char(&header, buf);
+
+	if ((numbytes = send(sockfd, window[i], PACKET_SIZE, 0) == -1)) {
+		perror("send");
+		exit(1);
+	}
+
+	char rbuf[PACKET_SIZE];
+	memset(rbuf, '\0', PACKET_SIZE);
+	PacketHeader rheader;
+
+	std::chrono::time_point<std::chrono::system_clock> start, current;
+	start = std::chrono::high_resolution_clock::now();
+	std::chrono::milliseconds msec(500);
+	std::chrono::duration<double> timeout(msec);
+
+	while (true) {
+		numbytes = recv(sockfd, rbuf, PACKET_SIZE , 0);
+		if (numbytes == -1) {
+			if (errno != EAGAIN && errno != EWOULDBLOCK) { // if not timeout
+				perror("recvfrom");
+				exit(1);
+			}
+		} else {
+			parse_data(&rheader, rbuf);
+			if (rheader.type == 3 && rheader.seqNum == 1000) { // random >>>>>>>>>>>>>>>>>>>>
+				break;
+			}
+		}
+
+		// when timeout
+		current = std::chrono::high_resolution_clock::now();
+		if (current - start >= timeout) {
+			if ((numbytes = send(sockfd, window[i], PACKET_SIZE, 0) == -1)) {
+				perror("send");
+				exit(1);
+			}
+			start = std::chrono::high_resolution_clock::now();
+		}
+	}
+
+
+}
 
 int main(int argc, char *argv[]) {
 	// int wStart = 0;
@@ -182,6 +231,9 @@ int main(int argc, char *argv[]) {
 	}
 
 
+	// send start
+	sendConnection(sockfd, 0); // 0: start
+
 	setWindow(window, wSize, file_str, file_idx, seqNum);
 
 	sendWindow(window, wTime, sockfd, 0);
@@ -192,14 +244,14 @@ int main(int argc, char *argv[]) {
 	int ack_pack, old_size, add_size, start;
 	std::chrono::time_point<std::chrono::system_clock> current_time;
 	std::chrono::milliseconds msec(500);
-    std::chrono::duration<double> timeout(msec);
+	std::chrono::duration<double> timeout(msec);
+
 
 	while (true) {
+		memset(buffer, '\0', PACKET_SIZE);
 		numbytes = recv(sockfd, buffer, PACKET_SIZE , 0);
 		if (numbytes == -1) {
-			if (errno == EAGAIN || errno == EWOULDBLOCK) {
-				continue; // try again
-			} else {
+			if (errno != EAGAIN && errno != EWOULDBLOCK) { // if not timeout
 				perror("recvfrom");
 				exit(1);
 			}
@@ -208,7 +260,7 @@ int main(int argc, char *argv[]) {
 			parse_data(&header, buffer);
 			if (header.type == 3) {
 				if (header.seqNum > lowSeqNum) {
-					ack_pack = header.seqNum - lowSeqNum;
+					ack_pack = header.seqNum - lowSeqNum; // # of acked packets
 
 					// delete from window
 					for (int i = 0; i < ack_pack; i++) {
@@ -235,12 +287,14 @@ int main(int argc, char *argv[]) {
 		}
 
 		assert(!wTime.empty());
-
+		// check timeout
 		current_time = std::chrono::high_resolution_clock::now();
 		if (current_time - wTime[0] >= timeout) {
 			sendWindow(window, wTime, sockfd, 0); // send the whole window
 		}
 	}
+
+	sendConnection(sockfd, 1);
 
 	freeaddrinfo(servinfo);
 
