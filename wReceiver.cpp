@@ -24,36 +24,18 @@ struct PacketHeader {
 	unsigned int checksum; // 32-bit CRC
 };
 
-void int_to_char(char * buf, unsigned int value, int & i) {
-	buf[i++] = value >> 24;
-	buf[i++] = (value >> 16) & 0xff;
-	buf[i++] = (value >> 8) & 0xff;
-	buf[i++] = value & 0xff;
-}
-
 void header_to_char(PacketHeader* header, char * buf) {
-	int i = 0;
-	int_to_char(buf, header->type, i);
-	int_to_char(buf, header->seqNum, i);
-	int_to_char(buf, header->length, i);
-	int_to_char(buf, header->checksum, i);
-}
-
-unsigned int char_to_int(char * buf, int &i) {
-	unsigned int ret;
-	ret += buf[i++] << 24;
-	ret += buf[i++] << 16;
-	ret += buf[i++] << 8;
-	ret += buf[i++];
-	return ret;
+    memcpy(buf , (char*)&(header->type), 4);
+	memcpy(buf + 4 , (char*)&(header->seqNum), 4);
+	memcpy(buf + 8 , (char*)&(header->length), 4);
+	memcpy(buf + 12 , (char*)&(header->checksum), 4);
 }
 
 void parse_header(PacketHeader * header, char * buf) {
-	int i = 0;
-	header->type = char_to_int(buf, i);
-	header->seqNum = char_to_int(buf, i);
-	header->length = char_to_int(buf, i);
-	header->checksum = char_to_int(buf, i);
+	memcpy((char*)&(header->type), buf, 4);
+	memcpy((char*)&(header->seqNum), buf + 4, 4);
+	memcpy((char*)&(header->length), buf + 8, 4);
+	memcpy((char*)&(header->checksum), buf + 12, 4);
 }
 
 void parse_packet(PacketHeader *header, char *buf, char *data) {
@@ -218,7 +200,7 @@ int main(int argc, char *argv[]) {
 				outfile.close();
 			}
 
-		} else { // DATA
+		} else if (dheader.type = 2){ // DATA
 
 			if (strcmp(sender_ip, their_ip) != 0) { // Data from other sender, ignore
 				continue;
@@ -254,6 +236,9 @@ int main(int argc, char *argv[]) {
 			aheader.checksum = 0;
 			memset(&abuf, '\0', PACKET_SIZE);
 			header_to_char(&aheader, abuf);
+
+		} else {
+			continue;
 		}
 
 		// send ACK

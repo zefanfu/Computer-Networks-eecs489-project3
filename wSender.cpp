@@ -35,38 +35,27 @@ struct PacketHeader {
 	unsigned int checksum; // 32-bit CRC
 };
 
-void int_to_char(char * buf, unsigned int value, int & i) {
-	buf[i++] = value >> 24;
-	buf[i++] = (value >> 16) & 0xff;
-	buf[i++] = (value >> 8) & 0xff;
-	buf[i++] = value & 0xff;
-}
-
 void header_to_char(PacketHeader* header, char * buf) {
-	int i = 0;
-	int_to_char(buf, header->type, i);
-	int_to_char(buf, header->seqNum, i);
-	int_to_char(buf, header->length, i);
-	int_to_char(buf, header->checksum, i);
-}
-
-unsigned int char_to_int(char * buf, int &i) {
-	unsigned int ret;
-	ret += buf[i++] << 24;
-	ret += buf[i++] << 16;
-	ret += buf[i++] << 8;
-	ret += buf[i++];
-	return ret;
+    memcpy(buf , (char*)&(header->type), 4);
+	memcpy(buf + 4 , (char*)&(header->seqNum), 4);
+	memcpy(buf + 8 , (char*)&(header->length), 4);
+	memcpy(buf + 12 , (char*)&(header->checksum), 4);
 }
 
 void parse_header(PacketHeader * header, char * buf) {
-	int i = 0;
-	header->type = char_to_int(buf, i);
-	header->seqNum = char_to_int(buf, i);
-	header->length = char_to_int(buf, i);
-	header->checksum = char_to_int(buf, i);
+	memcpy((char*)&(header->type), buf, 4);
+	memcpy((char*)&(header->seqNum), buf + 4, 4);
+	memcpy((char*)&(header->length), buf + 8, 4);
+	memcpy((char*)&(header->checksum), buf + 12, 4);
 }
 
+void to_packet(PacketHeader * header, char * buf, std::string data_str) {
+	header_to_char(header, buf);
+	// copy data
+	for (int j = 0; j < data_str.size(); j++) {
+		buf[16 + j] = data_str[j];
+	}
+}
 // put at most size packets to the window
 void setWindow(std::deque<char*>& window, int size, 
 	std::string & file_str, int& file_idx, int& seqNum) {
@@ -96,12 +85,8 @@ void setWindow(std::deque<char*>& window, int size,
 
 		char * buf = new char [PACKET_SIZE];
 		memset(buf, '\0', PACKET_SIZE);
-		header_to_char(&header, buf);
-		// copy
-		for (int j = 0; j < data_str.size(); j++) {
-			buf[16 + j] = data_str[j];
-		}
-
+		to_packet(&header, buf, data_str);
+		
 		window.push_back(buf);
 	}
 }
