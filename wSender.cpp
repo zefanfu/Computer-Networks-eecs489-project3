@@ -88,7 +88,10 @@ void setWindow(std::deque<char*>& window, int size,
 
 		file_idx += data_str.size();
 
-		 
+		PacketHeader header;
+		header.type = 2; // DATA
+		header.seqNum = seqNum++;
+		header.length = data_str.size();
 		header.checksum = crc32(data_str.c_str(), data_str.size());
 
 		char * buf = new char [PACKET_SIZE];
@@ -117,25 +120,28 @@ void sendWindow(std::deque<char*>& window, std::deque<std::chrono::time_point<st
 	}
 }
 
+
+// send START or END
 void sendConnection(int sockfd, int type) {
-	PacketHeader header;
-	header.type = type;
-	header.seqNum = 1000; // random >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-	header.length = 0;
-	header.checksum = 0;
+	PacketHeader cheader; // header of START or END
+	cheader.type = type;
+	cheader.seqNum = 1000; // random >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+	cheader.length = 0;
+	cheader.checksum = 0;
 
-	char buf[PACKET_SIZE];
-	memset(buf, '\0', PACKET_SIZE);
-	header_to_char(&header, buf);
+	char cbuf[PACKET_SIZE];
+	memset(cbuf, '\0', PACKET_SIZE);
+	header_to_char(&cheader, cbuf);
+	int numbytes;
 
-	if ((numbytes = send(sockfd, window[i], PACKET_SIZE, 0) == -1)) {
+	if ((numbytes = send(sockfd, cbuf, PACKET_SIZE, 0) == -1)) {
 		perror("send");
 		exit(1);
 	}
 
 	char rbuf[PACKET_SIZE];
 	memset(rbuf, '\0', PACKET_SIZE);
-	PacketHeader rheader;
+	PacketHeader rheader; // header of response from receiver
 
 	std::chrono::time_point<std::chrono::system_clock> start, current;
 	start = std::chrono::high_resolution_clock::now();
@@ -151,7 +157,7 @@ void sendConnection(int sockfd, int type) {
 			}
 		} else {
 			parse_header(&rheader, rbuf);
-			if (rheader.type == 3 && rheader.seqNum == 1000) { // random >>>>>>>>>>>>>>>>>>>>
+			if (rheader.type == 3 && rheader.seqNum == cheader.seqNum) { // random >>>>>>>>>>>>>>>>>>>>
 				break;
 			}
 		}
@@ -159,7 +165,7 @@ void sendConnection(int sockfd, int type) {
 		// when timeout
 		current = std::chrono::high_resolution_clock::now();
 		if (current - start >= timeout) {
-			if ((numbytes = send(sockfd, window[i], PACKET_SIZE, 0) == -1)) {
+			if ((numbytes = send(sockfd, cbuf, PACKET_SIZE, 0) == -1)) {
 				perror("send");
 				exit(1);
 			}
