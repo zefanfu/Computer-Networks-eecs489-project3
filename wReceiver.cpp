@@ -69,6 +69,15 @@ void parse_packet(PacketHeader *header, char *buf, char *data) {
 	}
 }
 
+// get sockaddr, IPv4 or IPv6:
+void *get_in_addr(struct sockaddr *sa)
+{
+    if (sa->sa_family == AF_INET) {
+        return &(((struct sockaddr_in*)sa)->sin_addr);
+    }
+
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
 
 int main(int argc, char *argv[]) {
 	int sockfd;
@@ -76,11 +85,12 @@ int main(int argc, char *argv[]) {
 	int rv;
 	int numbytes;
 	struct sockaddr_storage their_addr;
-    struct sockaddr_storage sender_addr;
-	char buf[MAXBUFLEN];
+    // struct sockaddr_storage sender_addr;
+	// char buf[MAXBUFLEN];
 	socklen_t addr_len;
-    socklen_t sender_len;
-	// char s[INET6_ADDRSTRLEN];
+    // socklen_t sender_len;
+	char their_ip[INET6_ADDRSTRLEN];
+	char sender_ip[INET6_ADDRSTRLEN];
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_UNSPEC; // set to AF_INET to force IPv4
@@ -134,7 +144,7 @@ int main(int argc, char *argv[]) {
 		// memset(sbuf, '\0', PACKET_SIZE);
 
 		// // wait for START
-		addr_len = sizeof their_addr;
+		// addr_len = sizeof their_addr;
 		// if ((numbytes = recvfrom(sockfd, sbuf, PACKET_SIZE , 0,
 		// 	(struct sockaddr *)&their_addr, &addr_len)) == -1) {
 		// 	perror("recvfrom");
@@ -168,7 +178,9 @@ int main(int argc, char *argv[]) {
 		std::deque<char*> window;
 		int wSize = atoi(argv[3]);
 		int expSeqNum = 0; // expected seqnum;
+		bool inConnection = false; // in the middle of a connection
 
+		memset(sender_ip, '\0', INET6_ADDRSTRLEN);
 		// loop for recv data
 		while (true) {
 			memset(dbuf, '\0', PACKET_SIZE);
@@ -181,33 +193,85 @@ int main(int argc, char *argv[]) {
 			memset(data, '\0', CHUNCK_SIZE);
 			parse_packet(dheader, dbuf, data);
 
+			// check checksum
+			int checksum = crc32(data, dheader.length);
+			if (dheader.checksum != checksum) {
+				continue;
+			}
+
+			// get ip
+			memset(their_ip, '\0', INET6_ADDRSTRLEN);
+			inet_ntop(their_addr.ss_family,
+						get_in_addr((struct sockaddr *)&their_addr),
+						their_ip, sizeof their_ip);
+
 			if (dheader.type == 0) { // START
-				
+
+				if (!inConnection) { // start a new connection
+					strcpy(sender_ip, their_ip);
+					// send ACK
+					aheader.type = 3;
+					aheader.seqNum = dheader.seqNum;
+					aheader.length = 0;
+					aheader.checksum = 0;
+					memset(abuf, '\0', PACKET_SIZE);
+					header_to_char(aheader, abuf);
+					// send ack of START
+					// if ((numbytes = sendto(sockfd, abuf, PACKET_SIZE, 0,
+					// 	 (struct sockaddr *)&their_addr, &addr_len)) == -1) {
+					// 	perror("talker: sendto");
+					// 	exit(1);
+					// }
+
+					// open new file
+					filename = "FILE-" + to_string(num_file);
+					num_file++;
+					std::ofstream outfile (filename.c_str(), std::ofstream::binary);
+
+					inConnection = true;
+
+				} else if (strcmp(sender_ip, their_ip) == 0) { // START from the same connection
+					// send ACK
+					aheader.type = 3;
+					aheader.seqNum = dheader.seqNum;
+					aheader.length = 0;
+					aheader.checksum = 0;
+					memset(abuf, '\0', PACKET_SIZE);
+					header_to_char(aheader, abuf);
+					// send ack of START
+					// if ((numbytes = sendto(sockfd, abuf, PACKET_SIZE, 0,
+					// 	 (struct sockaddr *)&their_addr, &addr_len)) == -1) {
+					// 	perror("talker: sendto");
+					// 	exit(1);
+					// }
+				} else { // START from other ip, ignore
+					continue;
+				}
+
 			} else if (dheader.type = 1) { // END
+
 				aheader.type = 3;
 				aheader.seqNum = dheader.seqNum;
 				aheader.length = 0;
 				aheader.checksum = 0;
 				memset(abuf, '\0', PACKET_SIZE);
 				header_to_char(aheader, abuf);
-				// send ACKs
-				if ((numbytes = sendto(sockfd, abuf, PACKET_SIZE, 0,
-					(struct sockaddr *)&their_addr, &addr_len)) == -1) {
-					perror("talker: sendto");
-					exit(1);
+
+				if (strcmp(sender_ip, their_ip) == 0) { // end a connection
+					memset(sender_ip, '\0', INET6_ADDRSTRLEN);
+					isConnection = false;
+					outfile.close();
 				}
 
-				break;
 			} else { // DATA
+
+				if (strcmp(sender_ip, their_ip) != 0) { // Data from other sender, ignore
+					continue;
+				}
+
 				if (dheader.seqNum < expSeqNum || dheader.seqNum >= expSeqNum + window.size()) {
-					continue;
+					continue; // ignore, no ACK sent
 				}
-
-				int checksum = crc32(data, dheader.length);
-				if (dheader.checksum != checksum) {
-					continue;
-				}
-
 
                 // if there's gap in window, insert NULL
 				for (int i = window.size(); i <= dheader.seqNum - expSeqNum; i++) {
@@ -235,12 +299,13 @@ int main(int argc, char *argv[]) {
 				aheader.checksum = 0;
 				memset(abuf, '\0', PACKET_SIZE);
 				header_to_char(aheader, abuf);
-				// send ACKs
-				if ((numbytes = sendto(sockfd, abuf, PACKET_SIZE, 0,
-					(struct sockaddr *)&their_addr, &addr_len)) == -1) {
+			}
+
+			// send ACK
+			if ((numbytes = sendto(sockfd, abuf, PACKET_SIZE, 0,
+				(struct sockaddr *)&their_addr, &addr_len)) == -1) {
 					perror("talker: sendto");
 					exit(1);
-				}
 			}
 
 		}
