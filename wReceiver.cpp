@@ -14,7 +14,7 @@
 
 #include "crc32.h"
 
-#define CHUNCK_SIZE 3
+#define CHUNCK_SIZE 200
 #define PACKET_SIZE 1472
 
 struct PacketHeader {
@@ -61,29 +61,21 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-void pr(PacketHeader *header, char * data) {
-	std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
-	std::cout << header->type << std::endl;
-    std::cout << header->seqNum << std::endl;
-    std::cout << header->length << std::endl;
-    std::cout << header->checksum << std::endl;
-    std::cout << data << std::endl;
-    std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
-}
+// void pr(PacketHeader *header, char * data) {
+// 	std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
+// 	std::cout << header->type << std::endl;
+//     std::cout << header->seqNum << std::endl;
+//     std::cout << header->length << std::endl;
+//     std::cout << header->checksum << std::endl;
+//     std::cout << data << std::endl;
+//     std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
+// }
 
 int main(int argc, char *argv[]) {
 	int sockfd;
 	struct addrinfo hints, *servinfo, *p;
 	int rv;
 	int numbytes;
-
-	int idx = 0;
-
-	// struct sockaddr_storage their_addr;
-    // struct sockaddr_storage sender_addr;
-	// char buf[MAXBUFLEN];
-	// socklen_t addr_len;
-    // socklen_t sender_len;
 	char their_ip[INET6_ADDRSTRLEN];
 	char sender_ip[INET6_ADDRSTRLEN];
 
@@ -151,15 +143,8 @@ int main(int argc, char *argv[]) {
 			exit(1);
 		}
 
-		if ((idx++) % 3 == 1) {
-			std::cout << "....................................................idx: " << std::endl;
-			continue;
-		}
-
 		memset(data, '\0', CHUNCK_SIZE);
 		parse_packet(&dheader, dbuf, data);
-
-		// pr(&dheader, data);
 
 		// check checksum
 		int checksum = crc32(data, dheader.length);
@@ -172,9 +157,6 @@ int main(int argc, char *argv[]) {
 		inet_ntop(their_addr.ss_family,
 					get_in_addr((struct sockaddr *)&their_addr),
 					their_ip, sizeof their_ip);
-
-		// pr(&dheader, data);
-		// std::cout << "type: " << dheader.type << std::endl;
 
 		if (dheader.type == 0) { // START
 
@@ -226,29 +208,17 @@ int main(int argc, char *argv[]) {
 
 		} else if (dheader.type == 2){ // DATA
 
-			// if ((idx++) % 2 == 0) {
-			// 	continue;
-			// }
-
-			// std:: cout << "data1" << std::endl;
-			// std::cout << "recv data: " << data << std::endl;
-
 			if (strcmp(sender_ip, their_ip) != 0) { // Data from other sender, ignore
 				continue;
 			}
 
-			// std:: cout << "data3" << std::endl;
-			std::cout << "seqNum: " << dheader.seqNum << std::endl;
-            std::cout << "expSeqNum: " << expSeqNum << std::endl;
+			// std::cout << "seqNum: " << dheader.seqNum << std::endl;
+   //          std::cout << "expSeqNum: " << expSeqNum << std::endl;
 
 			if (dheader.seqNum >= expSeqNum + wSize) {
 				continue; // ignore, no ACK sent
 			}
-			// std::cout << "size: " << wSize << std::endl;
-			// std:: cout << "data2" << std::endl;
 
-            // std::cout << "seqNum: " << dheader.seqNum << std::endl;
-            // std::cout << "expSeqNum: " << expSeqNum << std::endl;
             if (dheader.seqNum >= expSeqNum) { // if <, immediatley send back an ACK
 
             	// if there's gap in window, insert NULL
@@ -256,16 +226,17 @@ int main(int argc, char *argv[]) {
 					window.push_back(NULL);
 				}
 
-				// std::cout << "win size: " << window.size() << std::endl;
-
-				// std::cout << "current size: " << window.size() << std::endl;
+				// char x[CHUNCK_SIZE + 1];
+				// memset(x, 0, CHUNCK_SIZE + 1);
+				// strcpy(x, data);
+				// std::cout << "data: " << data;
 
 				char *newData = new char[CHUNCK_SIZE];
 				for (int i = 0; i < dheader.length; i++) {
 					newData[i] = data[i];
 				}
 				window[dheader.seqNum - expSeqNum] = newData;
-				std::cout << "back:" << window.back()[0] << std::endl;
+				
 				if (dheader.seqNum == expSeqNum) { // write to file
 					while (!window.empty() && window[0] != NULL) {
 
@@ -284,15 +255,8 @@ int main(int argc, char *argv[]) {
 			aheader.checksum = 0;
 			memset(&abuf, '\0', PACKET_SIZE);
 			header_to_char(&aheader, abuf);
-
-			// std::cout << "expected:" << aheader.seqNum << std::endl;
-
+			
 		} else {
-			continue;
-		}
-
-		if ((idx++) % 5 == 1) {
-			std::cout << "lost ack................." << std::endl;
 			continue;
 		}
 
@@ -302,7 +266,7 @@ int main(int argc, char *argv[]) {
 				perror("talker: sendto");
 				exit(1);
 		}
-		std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
+		// std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
 	}
 
 

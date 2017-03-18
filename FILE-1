@@ -39,11 +39,18 @@ class AssignmentNetworks(Topo):
         self.addLink(h6, s6)
         self.addLink(h9, s6)
         self.addLink(h10, s6)
-        self.addLink(s1, s2)
-        self.addLink(s2, s3)
-        self.addLink(s2, s4)
-        self.addLink(s3, s5)
-        self.addLink(s5, s6)
+        # self.addLink(s1, s2)
+        # self.addLink(s2, s3)
+        # self.addLink(s2, s4)
+        # self.addLink(s3, s5)
+        # self.addLink(s5, s6)
+
+        self.addLink(s1, s2, loss=30)
+        self.addLink(s2, s3, loss=30)
+        self.addLink(s2, s4, loss=30)
+        self.addLink(s3, s5, loss=30)
+        self.addLink(s5, s6, loss=30)
+
         
         
 if __name__ == '__main__':
@@ -58,4 +65,3 @@ if __name__ == '__main__':
     net.start()
     CLI( net )
     net.stop()
-
