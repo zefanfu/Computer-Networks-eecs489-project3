@@ -1,5 +1,1 @@
-abcdefghijklmnopqrstuvwxyz
-1234567890
-zxcvbnm
-asdfghjkl
-!@#$%^&*()
+abcd

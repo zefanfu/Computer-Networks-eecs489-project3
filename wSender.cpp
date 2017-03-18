@@ -27,7 +27,7 @@
 
 #define CHUNCK_SIZE 3
 #define PACKET_SIZE 1472
-#define RETRANS_TIME 2000
+#define RETRANS_TIME 500
 
 struct PacketHeader {
 	unsigned int type;     // 0: START; 1: END; 2: DATA; 3: ACK
@@ -50,42 +50,54 @@ void parse_header(PacketHeader * header, char * buf) {
 	memcpy((char*)&(header->checksum), buf + 12, 4);
 }
 
-void to_packet(PacketHeader * header, char * buf, std::string data_str) {
+void to_packet(PacketHeader * header, char * buf, char * data, int length) {
 	header_to_char(header, buf);
 	// copy data
-	for (int j = 0; j < data_str.size(); j++) {
-		buf[16 + j] = data_str[j];
+	for (int j = 0; j < length; j++) {
+		buf[16 + j] = data[j];
 	}
 }
+
 // put at most size packets to the window
-void setWindow(std::deque<char*>& window, int size, 
-	std::string & file_str, int& file_idx, int& seqNum) {
-	std::string data_str;
+void setWindow(std::deque<char*>& window, int size, std::istream& is, int& seqNum) {
+	// std::string data_str;
+	char data[CHUNCK_SIZE];
+	int length;
 	
 	for (int i = 0; i < size; i++) {
 		// end of file
-		if (file_idx >= file_str.size()) {
+		// if (file_idx >= file_str.size()) {
+		// 	return;
+		// }
+
+		// if (file_idx + CHUNCK_SIZE < file_str.size()) {
+		// 	data_str = file_str.substr(file_idx, CHUNCK_SIZE);
+		// } else {
+		// 	data_str = file_str.substr(file_idx);
+		// 	// isEnd = true; 
+		// }
+		// std::cout << data_str << std::endl;
+		// file_idx += data_str.size();
+		// end of file
+		is.read(data, CHUNCK_SIZE);
+
+		length = is.gcount();
+		std::cout << "length: " << length << std::endl;
+
+		if (length <= 0) {
+			std::cout << "==0" << std::endl;
 			return;
 		}
-
-		if (file_idx + CHUNCK_SIZE < file_str.size()) {
-			data_str = file_str.substr(file_idx, CHUNCK_SIZE);
-		} else {
-			data_str = file_str.substr(file_idx);
-			// isEnd = true; 
-		}
-		std::cout << data_str << std::endl;
-		file_idx += data_str.size();
 
 		PacketHeader header;
 		header.type = 2; // DATA
 		header.seqNum = seqNum++;
-		header.length = data_str.size();
-		header.checksum = crc32(data_str.c_str(), data_str.size());
+		header.length = length;
+		header.checksum = crc32(data, length);
 
 		char * buf = new char [PACKET_SIZE];
 		memset(buf, '\0', PACKET_SIZE);
-		to_packet(&header, buf, data_str);
+		to_packet(&header, buf, data, length); // convert header and data to a packet
 		
 		window.push_back(buf);
 		// std::cout << window.size() << std::endl;
@@ -128,7 +140,7 @@ void sendWindow(std::deque<char*>& window, std::deque<std::chrono::time_point<st
 		// cheader.checksum = 1;
 
 		parse_packet(&cheader, window[i], data);
-		std::cout << cheader.seqNum << std::endl;
+		std::cout << cheader.type << std::endl;
 
 
 
@@ -202,20 +214,21 @@ int main(int argc, char *argv[]) {
 	int wSize = atoi(argv[2]);
 	int lowSeqNum = 0;
 	int seqNum = 0; // next seqNum to be added
-	int file_idx = 0;
+	// int file_idx = 0;
 	std::deque<std::chrono::time_point<std::chrono::system_clock>> wTime;
 	std::deque<char*> window;
 
-	std::ifstream is{argv[1], std::ios::binary | std::ios::ate};
+	std::ifstream is(argv[1], std::ios::binary);
 	if (!is) {
 		std::cout << "Could not open file\n";
 		return 1;
 	}
-	auto size = is.tellg();
-	// auto num_chunk  = size / CHUNCK_SIZE; // num of chunck - 1
-	std::string file_str(size, '\0'); // construct string to stream size
-	is.seekg(0);
-	is.read(&file_str[0], size);
+
+	// auto size = is.tellg();
+	// // auto num_chunk  = size / CHUNCK_SIZE; // num of chunck - 1
+	// std::string file_str(size, '\0'); // construct string to stream size
+	// is.seekg(0);
+	// is.read(&file_str[0], size);
 
 
 	int sockfd;
@@ -262,7 +275,7 @@ int main(int argc, char *argv[]) {
 	sendConnection(sockfd, 0); // 0: start
 
 	// std::cout << "wsize: " << wSize << std::endl;
-	setWindow(window, wSize, file_str, file_idx, seqNum);
+	setWindow(window, wSize, is, seqNum);
 
 	sendWindow(window, wTime, sockfd, 0);
 
@@ -291,7 +304,7 @@ int main(int argc, char *argv[]) {
 
 				// std::cout << "recv" << std::endl;
 				if (header.seqNum > lowSeqNum) {
-					ack_pack = header.seqNum - lowSeqNum; // # of acked packets, # of new packets added to the window
+					ack_pack = header.seqNum - lowSeqNum; // # of acked packets, max # of new packets added to the window
 
 					// delete from window
 					for (int i = 0; i < ack_pack; i++) {
@@ -303,7 +316,7 @@ int main(int argc, char *argv[]) {
 					std::cout << "ack packets: " << ack_pack << std::endl;
 
 					old_size = window.size();
-					setWindow(window, ack_pack, file_str, file_idx, seqNum);
+					setWindow(window, ack_pack, is, seqNum);
 					add_size = window.size() - old_size;
 					std::cout << "add size: " << add_size << std::endl;
 					start = window.size() - add_size;
@@ -330,6 +343,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	// send END
 	sendConnection(sockfd, 1);
 
 	freeaddrinfo(servinfo);

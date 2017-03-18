@@ -151,9 +151,10 @@ int main(int argc, char *argv[]) {
 			exit(1);
 		}
 
-		// if ((idx++) % 4 == 1) {
-		// 	continue;
-		// }
+		if ((idx++) % 3 == 1) {
+			std::cout << "....................................................idx: " << std::endl;
+			continue;
+		}
 
 		memset(data, '\0', CHUNCK_SIZE);
 		parse_packet(&dheader, dbuf, data);
@@ -230,7 +231,7 @@ int main(int argc, char *argv[]) {
 			// }
 
 			// std:: cout << "data1" << std::endl;
-			std::cout << "recv data: " << data << std::endl;
+			// std::cout << "recv data: " << data << std::endl;
 
 			if (strcmp(sender_ip, their_ip) != 0) { // Data from other sender, ignore
 				continue;
@@ -240,37 +241,41 @@ int main(int argc, char *argv[]) {
 			std::cout << "seqNum: " << dheader.seqNum << std::endl;
             std::cout << "expSeqNum: " << expSeqNum << std::endl;
 
-			if (dheader.seqNum < expSeqNum || dheader.seqNum >= expSeqNum + wSize) {
+			if (dheader.seqNum >= expSeqNum + wSize) {
 				continue; // ignore, no ACK sent
 			}
 			// std::cout << "size: " << wSize << std::endl;
 			// std:: cout << "data2" << std::endl;
 
-            // if there's gap in window, insert NULL
             // std::cout << "seqNum: " << dheader.seqNum << std::endl;
             // std::cout << "expSeqNum: " << expSeqNum << std::endl;
-			for (int i = window.size(); i <= dheader.seqNum - expSeqNum; i++) {
-				window.push_back(NULL);
-			}
+            if (dheader.seqNum >= expSeqNum) { // if <, immediatley send back an ACK
 
-			// std::cout << "win size: " << window.size() << std::endl;
-
-			// std::cout << "current size: " << window.size() << std::endl;
-
-			char *newData = new char[CHUNCK_SIZE];
-			for (int i = 0; i < dheader.length; i++) {
-				newData[i] = data[i];
-			}
-			window[dheader.seqNum - expSeqNum] = newData;
-			std::cout << "back:" << window.back()[0] << std::endl;
-			if (dheader.seqNum == expSeqNum) { // write to file
-				while (!window.empty() && window[0] != NULL) {
-
-					outfile.write(window[0], dheader.length);
-					delete [] window[0];
-					window.pop_front();
-					expSeqNum++;
+            	// if there's gap in window, insert NULL
+				for (int i = window.size(); i <= dheader.seqNum - expSeqNum; i++) {
+					window.push_back(NULL);
 				}
+
+				// std::cout << "win size: " << window.size() << std::endl;
+
+				// std::cout << "current size: " << window.size() << std::endl;
+
+				char *newData = new char[CHUNCK_SIZE];
+				for (int i = 0; i < dheader.length; i++) {
+					newData[i] = data[i];
+				}
+				window[dheader.seqNum - expSeqNum] = newData;
+				std::cout << "back:" << window.back()[0] << std::endl;
+				if (dheader.seqNum == expSeqNum) { // write to file
+					while (!window.empty() && window[0] != NULL) {
+
+						outfile.write(window[0], dheader.length);
+						delete [] window[0];
+						window.pop_front();
+						expSeqNum++;
+					}
+				}
+
 			}
 
 			aheader.type = 3;
