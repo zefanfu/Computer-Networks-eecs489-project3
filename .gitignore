@@ -2,3 +2,4 @@
 *.out
 wSender
 wReceiver
+*.py

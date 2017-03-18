@@ -61,11 +61,24 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+void pr(PacketHeader *header, char * data) {
+	std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
+	std::cout << header->type << std::endl;
+    std::cout << header->seqNum << std::endl;
+    std::cout << header->length << std::endl;
+    std::cout << header->checksum << std::endl;
+    std::cout << data << std::endl;
+    std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
+}
+
 int main(int argc, char *argv[]) {
 	int sockfd;
 	struct addrinfo hints, *servinfo, *p;
 	int rv;
 	int numbytes;
+
+	int idx = 0;
+
 	// struct sockaddr_storage their_addr;
     // struct sockaddr_storage sender_addr;
 	// char buf[MAXBUFLEN];
@@ -141,6 +154,8 @@ int main(int argc, char *argv[]) {
 		memset(data, '\0', CHUNCK_SIZE);
 		parse_packet(&dheader, dbuf, data);
 
+		pr(&dheader, data);
+
 		// check checksum
 		int checksum = crc32(data, dheader.length);
 		if (dheader.checksum != checksum) {
@@ -152,6 +167,9 @@ int main(int argc, char *argv[]) {
 		inet_ntop(their_addr.ss_family,
 					get_in_addr((struct sockaddr *)&their_addr),
 					their_ip, sizeof their_ip);
+
+		// pr(&dheader, data);
+		// std::cout << "type: " << dheader.type << std::endl;
 
 		if (dheader.type == 0) { // START
 
@@ -185,7 +203,7 @@ int main(int argc, char *argv[]) {
 				continue;
 			}
 
-		} else if (dheader.type = 1) { // END
+		} else if (dheader.type == 1) { // END
 
 			aheader.type = 3;
 			aheader.seqNum = dheader.seqNum;
@@ -195,20 +213,31 @@ int main(int argc, char *argv[]) {
 			header_to_char(&aheader, abuf);
 
 			if (strcmp(sender_ip, their_ip) == 0) { // end a connection
+				expSeqNum = 0;
 				memset(sender_ip, '\0', INET6_ADDRSTRLEN);
 				inConnection = false;
 				outfile.close();
 			}
 
-		} else if (dheader.type = 2){ // DATA
+		} else if (dheader.type == 2){ // DATA
+
+			// if ((idx++) % 2 == 0) {
+			// 	continue;
+			// }
+
+			// std:: cout << "data1" << std::endl;
 
 			if (strcmp(sender_ip, their_ip) != 0) { // Data from other sender, ignore
 				continue;
 			}
 
-			if (dheader.seqNum < expSeqNum || dheader.seqNum >= expSeqNum + window.size()) {
+			// std:: cout << "data3" << std::endl;
+
+			if (dheader.seqNum < expSeqNum || dheader.seqNum >= expSeqNum + wSize) {
 				continue; // ignore, no ACK sent
 			}
+
+			// std:: cout << "data2" << std::endl;
 
             // if there's gap in window, insert NULL
 			for (int i = window.size(); i <= dheader.seqNum - expSeqNum; i++) {
@@ -236,6 +265,8 @@ int main(int argc, char *argv[]) {
 			aheader.checksum = 0;
 			memset(&abuf, '\0', PACKET_SIZE);
 			header_to_char(&aheader, abuf);
+
+			std::cout << "expected:" << aheader.seqNum << std::endl;
 
 		} else {
 			continue;

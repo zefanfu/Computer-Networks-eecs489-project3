@@ -27,6 +27,7 @@
 
 #define CHUNCK_SIZE 3
 #define PACKET_SIZE 1472
+#define RETRANS_TIME 500
 
 struct PacketHeader {
 	unsigned int type;     // 0: START; 1: END; 2: DATA; 3: ACK
@@ -60,8 +61,7 @@ void to_packet(PacketHeader * header, char * buf, std::string data_str) {
 void setWindow(std::deque<char*>& window, int size, 
 	std::string & file_str, int& file_idx, int& seqNum) {
 	std::string data_str;
-	// bool isEnd = false;
-
+	
 	for (int i = 0; i < size; i++) {
 		// end of file
 		if (file_idx >= file_str.size()) {
@@ -74,7 +74,7 @@ void setWindow(std::deque<char*>& window, int size,
 			data_str = file_str.substr(file_idx);
 			// isEnd = true; 
 		}
-
+		std::cout << data_str << std::endl;
 		file_idx += data_str.size();
 
 		PacketHeader header;
@@ -88,15 +88,50 @@ void setWindow(std::deque<char*>& window, int size,
 		to_packet(&header, buf, data_str);
 		
 		window.push_back(buf);
+		// std::cout << window.size() << std::endl;
+	}
+
+	// std::cout << "set size: " << window.size() << std::endl;
+}
+
+
+void parse_packet(PacketHeader *header, char *buf, char *data) {
+	parse_header(header, buf);
+
+	if (header->length == 0) {
+		return;
+	}
+
+	buf += 16;
+	for (int i = 0; i < header->length; i++) {
+		*data++ = *buf++;
 	}
 }
+
 
 // start: starting point in window to send packets
 void sendWindow(std::deque<char*>& window, std::deque<std::chrono::time_point<std::chrono::system_clock>>& wTime, 
 	int sockfd, int start) {
-
+	// std::cout << window.size() << std::endl;
 	int numbytes;
 	for (int i = start; i < window.size(); i++) {
+		
+		// std::cout << window[i] << std::endl;
+		char data[CHUNCK_SIZE];
+		memset(data, 0, CHUNCK_SIZE);
+		// data[0] = 'a';
+		// data[1] = 'b';
+		PacketHeader cheader; // header of START or END
+		// cheader.type = 2;
+		// cheader.seqNum = 1000; // random >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+		// cheader.length = 2;
+		// cheader.checksum = 1;
+
+		parse_packet(&cheader, window[i], data);
+		std::cout << cheader.seqNum << std::endl;
+
+
+
 		if ((numbytes = send(sockfd, window[i], PACKET_SIZE, 0) == -1)) {
 			perror("send");
 			exit(1);
@@ -130,7 +165,7 @@ void sendConnection(int sockfd, int type) {
 
 	std::chrono::time_point<std::chrono::system_clock> start, current;
 	start = std::chrono::high_resolution_clock::now();
-	std::chrono::milliseconds msec(500);
+	std::chrono::milliseconds msec(RETRANS_TIME);
 	std::chrono::duration<double> timeout(msec);
 
 	while (true) {
@@ -143,6 +178,7 @@ void sendConnection(int sockfd, int type) {
 		} else {
 			parse_header(&rheader, rbuf);
 			if (rheader.type == 3 && rheader.seqNum == cheader.seqNum) { // random >>>>>>>>>>>>>>>>>>>>
+				// std::cout << "type: " << rheader.type << std::endl;
 				break;
 			}
 		}
@@ -168,7 +204,7 @@ int main(int argc, char *argv[]) {
 	int seqNum = 0; // next seqNum to be added
 	int file_idx = 0;
 	std::deque<std::chrono::time_point<std::chrono::system_clock>> wTime;
-	std::deque<char*> window(wSize);
+	std::deque<char*> window;
 
 	std::ifstream is{argv[1], std::ios::binary | std::ios::ate};
 	if (!is) {
@@ -225,6 +261,7 @@ int main(int argc, char *argv[]) {
 	// send start
 	sendConnection(sockfd, 0); // 0: start
 
+	// std::cout << "wsize: " << wSize << std::endl;
 	setWindow(window, wSize, file_str, file_idx, seqNum);
 
 	sendWindow(window, wTime, sockfd, 0);
@@ -234,7 +271,7 @@ int main(int argc, char *argv[]) {
 	memset(buffer, '\0', PACKET_SIZE);
 	int ack_pack, old_size, add_size, start;
 	std::chrono::time_point<std::chrono::system_clock> current_time;
-	std::chrono::milliseconds msec(500);
+	std::chrono::milliseconds msec(RETRANS_TIME);
 	std::chrono::duration<double> timeout(msec);
 
 
@@ -249,9 +286,12 @@ int main(int argc, char *argv[]) {
 		} else {
 			PacketHeader header;
 			parse_header(&header, buffer);
+			
 			if (header.type == 3) {
+
+				// std::cout << "recv" << std::endl;
 				if (header.seqNum > lowSeqNum) {
-					ack_pack = header.seqNum - lowSeqNum; // # of acked packets
+					ack_pack = header.seqNum - lowSeqNum; // # of acked packets, # of new packets added to the window
 
 					// delete from window
 					for (int i = 0; i < ack_pack; i++) {
@@ -260,9 +300,12 @@ int main(int argc, char *argv[]) {
 						wTime.pop_front();
 					}
 
+					std::cout << "ack packets: " << ack_pack << std::endl;
+
 					old_size = window.size();
 					setWindow(window, ack_pack, file_str, file_idx, seqNum);
 					add_size = window.size() - old_size;
+					std::cout << "add size: " << add_size << std::endl;
 					start = window.size() - add_size;
 
 					sendWindow(window, wTime, sockfd, start);
@@ -274,6 +317,7 @@ int main(int argc, char *argv[]) {
 
 
 		if (window.size() == 0) {
+			std::cout << "break" << std::endl;
 			break;
 		}
 
@@ -281,6 +325,7 @@ int main(int argc, char *argv[]) {
 		// check timeout
 		current_time = std::chrono::high_resolution_clock::now();
 		if (current_time - wTime[0] >= timeout) {
+			wTime.clear(); // empty times before reset
 			sendWindow(window, wTime, sockfd, 0); // send the whole window
 		}
 	}
