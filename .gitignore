@@ -3,3 +3,5 @@
 wSender
 wReceiver
 *.py
+*.txt
+FILE-*
