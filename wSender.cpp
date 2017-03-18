@@ -27,7 +27,7 @@
 
 #define CHUNCK_SIZE 3
 #define PACKET_SIZE 1472
-#define RETRANS_TIME 500
+#define RETRANS_TIME 2000
 
 struct PacketHeader {
 	unsigned int type;     // 0: START; 1: END; 2: DATA; 3: ACK
