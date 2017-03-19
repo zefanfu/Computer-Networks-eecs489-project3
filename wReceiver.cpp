@@ -128,8 +128,11 @@ int main(int argc, char *argv[]) {
 	int expSeqNum = 0; // expected seqnum;
 	bool inConnection = false; // in the middle of a connection
 	std::ofstream outfile;
+	std::ofstream logfile;
+	logfile.open(argv[2]);
 
 	memset(sender_ip, '\0', INET6_ADDRSTRLEN);
+
 	// loop for recv data
 	while (true) {
 		struct sockaddr_storage their_addr;
@@ -146,8 +149,11 @@ int main(int argc, char *argv[]) {
 		memset(data, '\0', CHUNCK_SIZE);
 		parse_packet(&dheader, dbuf, data);
 
+		logfile << dheader.type << '\t' << dheader.seqNum << '\t' << dheader.length << '\t' << dheader.checksum << std::endl;
+		std::cout << dheader.type << '\t' << dheader.seqNum << '\t' << dheader.length << '\t' << dheader.checksum << std::endl;
+
 		// check checksum
-		int checksum = crc32(data, dheader.length);
+		unsigned int checksum = crc32(data, dheader.length);
 		if (dheader.checksum != checksum) {
 			continue;
 		}
@@ -162,29 +168,34 @@ int main(int argc, char *argv[]) {
 
 			if (!inConnection) { // start a new connection
 				strcpy(sender_ip, their_ip);
-				// send ACK
+				// set ACK
 				aheader.type = 3;
 				aheader.seqNum = dheader.seqNum;
 				aheader.length = 0;
 				aheader.checksum = 0;
-				memset(abuf, '\0', PACKET_SIZE);
-				header_to_char(&aheader, abuf);
+				// memset(abuf, '\0', PACKET_SIZE);
+				// header_to_char(&aheader, abuf);
 
 				// open new file
 				filename = "FILE-" + std::to_string(num_file);
 				num_file++;
+
 				outfile.open(filename.c_str(), std::ofstream::binary);
+				if (!outfile) {
+					std::cout << "cannot open file" << std::endl;
+					exit(1);
+				}
 
 				inConnection = true;
 
 			} else if (strcmp(sender_ip, their_ip) == 0) { // START from the same connection
-				// send ACK
+				// set ACK
 				aheader.type = 3;
 				aheader.seqNum = dheader.seqNum;
 				aheader.length = 0;
 				aheader.checksum = 0;
-				memset(&abuf, '\0', PACKET_SIZE);
-				header_to_char(&aheader, abuf);
+				// memset(&abuf, '\0', PACKET_SIZE);
+				// header_to_char(&aheader, abuf);
 				
 			} else { // START from other ip, ignore
 				continue;
@@ -196,8 +207,8 @@ int main(int argc, char *argv[]) {
 			aheader.seqNum = dheader.seqNum;
 			aheader.length = 0;
 			aheader.checksum = 0;
-			memset(abuf, '\0', PACKET_SIZE);
-			header_to_char(&aheader, abuf);
+			// memset(abuf, '\0', PACKET_SIZE);
+			// header_to_char(&aheader, abuf);
 
 			if (strcmp(sender_ip, their_ip) == 0) { // end a connection
 				expSeqNum = 0;
@@ -212,10 +223,7 @@ int main(int argc, char *argv[]) {
 				continue;
 			}
 
-			// std::cout << "seqNum: " << dheader.seqNum << std::endl;
-   //          std::cout << "expSeqNum: " << expSeqNum << std::endl;
-
-			if (dheader.seqNum >= expSeqNum + wSize) {
+			if (dheader.seqNum >= expSeqNum + wSize) { // out of window
 				continue; // ignore, no ACK sent
 			}
 
@@ -253,20 +261,25 @@ int main(int argc, char *argv[]) {
 			aheader.seqNum = expSeqNum;
 			aheader.length = 0;
 			aheader.checksum = 0;
-			memset(&abuf, '\0', PACKET_SIZE);
-			header_to_char(&aheader, abuf);
+			// memset(&abuf, '\0', PACKET_SIZE);
+			// header_to_char(&aheader, abuf);
 			
 		} else {
 			continue;
 		}
 
 		// send ACK
+		memset(&abuf, '\0', PACKET_SIZE);
+		header_to_char(&aheader, abuf);
 		if ((numbytes = sendto(sockfd, abuf, PACKET_SIZE, 0,
 			(struct sockaddr *)&their_addr, addr_len)) == -1) {
 				perror("talker: sendto");
 				exit(1);
 		}
-		// std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
+
+		logfile << aheader.type << '\t' << aheader.seqNum << '\t' << aheader.length << '\t' << aheader.checksum << std::endl;
+		std::cout << aheader.type << '\t' << aheader.seqNum << '\t' << aheader.length << '\t' << aheader.checksum << std::endl;
+
 	}
 
 

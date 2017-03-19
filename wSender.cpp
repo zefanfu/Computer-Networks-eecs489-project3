@@ -66,11 +66,12 @@ void setWindow(std::deque<char*>& window, int size, std::istream& is, int& seqNu
 	
 	for (int i = 0; i < size; i++) {
 
-		// end of file
+		
 		is.read(data, CHUNCK_SIZE);
 
 		length = is.gcount();
 
+		// end of file
 		if (length <= 0) {
 			return;
 		}
@@ -107,7 +108,7 @@ void parse_packet(PacketHeader *header, char *buf, char *data) {
 
 // start: starting point in window to send packets
 void sendWindow(std::deque<char*>& window, std::deque<std::chrono::time_point<std::chrono::system_clock>>& wTime, 
-	int sockfd, int start) {
+	int sockfd, int start, std::ofstream& logfile) {
 
 	int numbytes;
 	for (int i = start; i < window.size(); i++) {
@@ -115,35 +116,33 @@ void sendWindow(std::deque<char*>& window, std::deque<std::chrono::time_point<st
 		char data[CHUNCK_SIZE];
 		memset(data, 0, CHUNCK_SIZE);
 
-		// PacketHeader cheader; // header of START or END
-		// // cheader.type = 2;
-		// // cheader.seqNum = 1000; // random >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-		// // cheader.length = 2;
-		// // cheader.checksum = 1;
-
-		// parse_packet(&cheader, window[i], data);
+		// get header from packets in the window
+		PacketHeader cheader;
+		parse_packet(&cheader, window[i], data);
 		// std::cout << cheader.type << std::endl;
-
-
 
 		if ((numbytes = send(sockfd, window[i], PACKET_SIZE, 0) == -1)) {
 			perror("send");
 			exit(1);
 		}
+
+		logfile << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
+		std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
+
 		wTime.push_back(std::chrono::high_resolution_clock::now());
 	}
 }
 
 
 // send START or END
-void sendConnection(int sockfd, int type) {
+void sendConnection(int sockfd, int type, std::ofstream& logfile) {
 	PacketHeader cheader; // header of START or END
 	cheader.type = type;
 	cheader.seqNum = 1000; // random >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 	cheader.length = 0;
 	cheader.checksum = 0;
 
-	char cbuf[PACKET_SIZE];
+	char cbuf[PACKET_SIZE]; // buffer for send data Packets
 	memset(cbuf, '\0', PACKET_SIZE);
 	header_to_char(&cheader, cbuf);
 	int numbytes;
@@ -152,6 +151,8 @@ void sendConnection(int sockfd, int type) {
 		perror("send");
 		exit(1);
 	}
+	logfile << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
+	std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
 
 	char rbuf[PACKET_SIZE];
 	memset(rbuf, '\0', PACKET_SIZE);
@@ -171,7 +172,11 @@ void sendConnection(int sockfd, int type) {
 			}
 		} else {
 			parse_header(&rheader, rbuf);
-			if (rheader.type == 3 && rheader.seqNum == cheader.seqNum) { // random >>>>>>>>>>>>>>>>>>>>
+
+			logfile << rheader.type << '\t' << rheader.seqNum << '\t' << rheader.length << '\t' << rheader.checksum << std::endl;
+			std::cout << rheader.type << '\t' << rheader.seqNum << '\t' << rheader.length << '\t' << rheader.checksum << std::endl;
+
+			if (rheader.type == 3 && rheader.seqNum == cheader.seqNum) {
 				// START or END ACKed
 				break;
 			}
@@ -203,6 +208,8 @@ int main(int argc, char *argv[]) {
 		std::cout << "Could not open file\n";
 		return 1;
 	}
+	std::ofstream logfile;
+	logfile.open(argv[3]);
 
 	int sockfd;
 	struct addrinfo hints, *servinfo, *p;
@@ -245,13 +252,12 @@ int main(int argc, char *argv[]) {
 
 
 	// send start
-	sendConnection(sockfd, 0); // 0: start
+	sendConnection(sockfd, 0, logfile); // 0: start
 
 	setWindow(window, wSize, is, seqNum);
 
-	sendWindow(window, wTime, sockfd, 0);
+	sendWindow(window, wTime, sockfd, 0, logfile);
 
-	// bool endFile = false;
 	char buffer[PACKET_SIZE];
 	memset(buffer, '\0', PACKET_SIZE);
 	int ack_pack, old_size, add_size, start;
@@ -272,6 +278,9 @@ int main(int argc, char *argv[]) {
 			PacketHeader header;
 			parse_header(&header, buffer);
 			
+			logfile << header.type << '\t' << header.seqNum << '\t' << header.length << '\t' << header.checksum << std::endl;
+			std::cout << header.type << '\t' << header.seqNum << '\t' << header.length << '\t' << header.checksum << std::endl;
+
 			if (header.type == 3) { // ACK
 
 				if (header.seqNum > lowSeqNum) {
@@ -289,7 +298,7 @@ int main(int argc, char *argv[]) {
 					add_size = window.size() - old_size;
 					start = window.size() - add_size;
 
-					sendWindow(window, wTime, sockfd, start);
+					sendWindow(window, wTime, sockfd, start, logfile);
 
 					lowSeqNum = header.seqNum;
 				}
@@ -307,12 +316,12 @@ int main(int argc, char *argv[]) {
 		current_time = std::chrono::high_resolution_clock::now();
 		if (current_time - wTime[0] >= timeout) {
 			wTime.clear(); // empty times before reset
-			sendWindow(window, wTime, sockfd, 0); // send the whole window
+			sendWindow(window, wTime, sockfd, 0, logfile); // send the whole window
 		}
 	}
 
 	// send END
-	sendConnection(sockfd, 1);
+	sendConnection(sockfd, 1, logfile);
 
 	freeaddrinfo(servinfo);
 
