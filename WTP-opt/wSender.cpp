@@ -248,8 +248,10 @@ int main(int argc, char *argv[]) {
 	// send start
 	sendConnection(sockfd, 0, logfile); // 0: start
 
+	// change here
 	setWindow(window, wSize, is, seqNum); // put first k elements into window
 
+	// change here
 	sendWindow(window, sockfd, 0, logfile); //send first k elements
 
 	char buffer[PACKET_SIZE];
@@ -345,6 +347,7 @@ int main(int argc, char *argv[]) {
 					// get header from packets in the window
 					PacketHeader cheader;
 					parse_packet(&cheader, window[i]->buf, data);
+					// std::cout << cheader.type << std::endl;
 					int numbytes;
 					if ((numbytes = send(sockfd, window[i]->buf, PACKET_SIZE, 0) == -1)) {
 						perror("send");

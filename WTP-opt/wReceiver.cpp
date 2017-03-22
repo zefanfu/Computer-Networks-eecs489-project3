@@ -66,6 +66,16 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+// void pr(PacketHeader *header, char * data) {
+// 	std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
+// 	std::cout << header->type << std::endl;
+//     std::cout << header->seqNum << std::endl;
+//     std::cout << header->length << std::endl;
+//     std::cout << header->checksum << std::endl;
+//     std::cout << data << std::endl;
+//     std::cout << "<<<<<<<<<<<<<<<<<<<<<<<<" << std::endl;
+// }
+
 int main(int argc, char *argv[]) {
 	int sockfd;
 	struct addrinfo hints, *servinfo, *p;
@@ -167,6 +177,8 @@ int main(int argc, char *argv[]) {
 				aheader.seqNum = dheader.seqNum;
 				aheader.length = 0;
 				aheader.checksum = 0;
+				// memset(abuf, '\0', PACKET_SIZE);
+				// header_to_char(&aheader, abuf);
 
 				// open new file
 				filename = "FILE-" + std::to_string(num_file);
@@ -186,6 +198,8 @@ int main(int argc, char *argv[]) {
 				aheader.seqNum = dheader.seqNum;
 				aheader.length = 0;
 				aheader.checksum = 0;
+				// memset(&abuf, '\0', PACKET_SIZE);
+				// header_to_char(&aheader, abuf);
 				
 			} else { // START from other ip, ignore
 				continue;
@@ -221,7 +235,7 @@ int main(int argc, char *argv[]) {
 					opt_element->seqNumIndex=expSeqNum+i;
 					opt_element->buf=NULL;
 					window.push_back(opt_element);					
-				}				
+				}			
 				// store data
             	char *newData = new char[CHUNCK_SIZE];
 				for (int i = 0; i < dheader.length; i++) {
@@ -239,12 +253,13 @@ int main(int argc, char *argv[]) {
 						expSeqNum++;
 					}
 				}
-				aheader.type = 3;
-				aheader.seqNum = dheader.seqNum;
-				aheader.length = 0;
-				aheader.checksum = 0;
+			}
 
-			}			
+			aheader.type = 3;
+			aheader.seqNum = dheader.seqNum;
+			aheader.length = 0;
+			aheader.checksum = 0;
+			
 		} else {
 			continue;
 		}
@@ -262,5 +277,7 @@ int main(int argc, char *argv[]) {
 		std::cout << aheader.type << '\t' << aheader.seqNum << '\t' << aheader.length << '\t' << aheader.checksum << std::endl;
 
 	}
+
+
 	return 0;
 }
