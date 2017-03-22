@@ -24,6 +24,10 @@ struct PacketHeader {
 	unsigned int checksum; // 32-bit CRC
 };
 
+struct DataPacket {
+	char * data;
+	unsigned int length;
+};
 void header_to_char(PacketHeader* header, char * buf) {
     memcpy(buf , (char*)&(header->type), 4);
 	memcpy(buf + 4 , (char*)&(header->seqNum), 4);
@@ -123,7 +127,7 @@ int main(int argc, char *argv[]) {
 	char data[CHUNCK_SIZE];
 	PacketHeader dheader; // header for data packets
 	PacketHeader aheader; // hedaer for ACKs
-	std::deque<char*> window;
+	std::deque<DataPacket> window;
 	int wSize = atoi(argv[3]);
 	int expSeqNum = 0; // expected seqnum;
 	bool inConnection = false; // in the middle of a connection
@@ -231,7 +235,10 @@ int main(int argc, char *argv[]) {
 
             	// if there's gap in window, insert NULL
 				for (int i = window.size(); i <= dheader.seqNum - expSeqNum; i++) {
-					window.push_back(NULL);
+					DataPacket dpack;
+					dpack.length = 0;
+					dpack.data = NULL;
+					window.push_back(dpack);
 				}
 
 				// char x[CHUNCK_SIZE + 1];
@@ -243,13 +250,14 @@ int main(int argc, char *argv[]) {
 				for (int i = 0; i < dheader.length; i++) {
 					newData[i] = data[i];
 				}
-				window[dheader.seqNum - expSeqNum] = newData;
+				window[dheader.seqNum - expSeqNum].data = newData;
+				window[dheader.seqNum - expSeqNum].length = dheader.length;
 				
 				if (dheader.seqNum == expSeqNum) { // write to file
-					while (!window.empty() && window[0] != NULL) {
+					while (!window.empty() && window[0].data != NULL) {
 
-						outfile.write(window[0], dheader.length);
-						delete [] window[0];
+						outfile.write(window[0].data, window[0].length);
+						delete [] window[0].data;
 						window.pop_front();
 						expSeqNum++;
 					}

@@ -189,6 +189,8 @@ void sendConnection(int sockfd, int type, std::ofstream& logfile) {
 				perror("send");
 				exit(1);
 			}
+			logfile << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
+			std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
 			start = std::chrono::high_resolution_clock::now();
 		}
 	}

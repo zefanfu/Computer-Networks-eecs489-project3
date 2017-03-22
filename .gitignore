@@ -4,4 +4,4 @@ wSender
 wReceiver
 *.py
 *.txt
-FILE-*
+*/FILE-*
