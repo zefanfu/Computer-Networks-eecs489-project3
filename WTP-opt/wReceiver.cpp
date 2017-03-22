@@ -25,7 +25,8 @@ struct PacketHeader {
 };
 
 struct OptReceiver {
-	unsigned int seqNumIndex;     
+	unsigned int seqNumIndex; 
+	unsigned int dataLength;
 	char* buf;
 };
 
@@ -233,6 +234,7 @@ int main(int argc, char *argv[]) {
 				for (int i = window.size(); i <= dheader.seqNum - expSeqNum; i++) {
 					OptReceiver* opt_element=new OptReceiver();
 					opt_element->seqNumIndex=expSeqNum+i;
+					opt_element->dataLength=0;
 					opt_element->buf=NULL;
 					window.push_back(opt_element);					
 				}			
@@ -241,12 +243,13 @@ int main(int argc, char *argv[]) {
 				for (int i = 0; i < dheader.length; i++) {
 					newData[i] = data[i];
 				}
-				window[dheader.seqNum - expSeqNum]->buf=newData;				
+				window[dheader.seqNum - expSeqNum]->buf=newData;	
+				window[dheader.seqNum - expSeqNum]->dataLength=dheader.length;
 				
 				if (dheader.seqNum == expSeqNum) { // write to file
 					while (!window.empty() && window[0]->buf != NULL) {
 
-						outfile.write(window[0]->buf, dheader.length);
+						outfile.write(window[0]->buf, window[0]->dataLength);
 						delete [] window[0]->buf;
 						delete window[0];
 						window.pop_front();
