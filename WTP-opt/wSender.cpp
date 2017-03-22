@@ -22,6 +22,8 @@
 #include <ctime>
 #include <deque>
 #include <assert.h>
+#include <stdlib.h>     /* srand, rand */
+#include <time.h>       /* time */
 
 #include "crc32.h"
 
@@ -131,9 +133,11 @@ void sendWindow(std::deque<OptAck*>& window, int sockfd, int start, std::ofstrea
 
 // send START or END
 void sendConnection(int sockfd, int type, std::ofstream& logfile) {
+	srand (time(NULL));
+
 	PacketHeader cheader; // header of START or END
 	cheader.type = type;
-	cheader.seqNum = 1000; // random >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+	cheader.seqNum = rand(); // random >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 	cheader.length = 0;
 	cheader.checksum = 0;
 
