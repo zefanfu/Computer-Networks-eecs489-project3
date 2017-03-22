@@ -186,6 +186,9 @@ void sendConnection(int sockfd, int type, std::ofstream& logfile) {
 				exit(1);
 			}
 			start = std::chrono::high_resolution_clock::now();
+			logfile << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
+			std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
+		
 		}
 	}
 
@@ -347,7 +350,6 @@ int main(int argc, char *argv[]) {
 					// get header from packets in the window
 					PacketHeader cheader;
 					parse_packet(&cheader, window[i]->buf, data);
-					// std::cout << cheader.type << std::endl;
 					int numbytes;
 					if ((numbytes = send(sockfd, window[i]->buf, PACKET_SIZE, 0) == -1)) {
 						perror("send");
