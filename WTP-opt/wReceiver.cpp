@@ -14,7 +14,7 @@
 
 #include "crc32.h"
 
-#define CHUNCK_SIZE 200
+#define CHUNCK_SIZE 1456
 #define PACKET_SIZE 1472
 
 struct PacketHeader {
