@@ -126,7 +126,7 @@ void sendWindow(std::deque<OptAck*>& window, int sockfd, int start, std::ofstrea
 			exit(1);
 		}
 		logfile << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
-		std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
+		// std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
 		window[i]->optTime=std::chrono::high_resolution_clock::now();
 	}
 }
@@ -151,7 +151,7 @@ void sendConnection(int sockfd, int type, std::ofstream& logfile) {
 		exit(1);
 	}
 	logfile << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
-	std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
+	// std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
 
 	char rbuf[PACKET_SIZE];
 	memset(rbuf, '\0', PACKET_SIZE);
@@ -174,7 +174,7 @@ void sendConnection(int sockfd, int type, std::ofstream& logfile) {
 			parse_header(&rheader, rbuf);
 
 			logfile << rheader.type << '\t' << rheader.seqNum << '\t' << rheader.length << '\t' << rheader.checksum << std::endl;
-			std::cout << rheader.type << '\t' << rheader.seqNum << '\t' << rheader.length << '\t' << rheader.checksum << std::endl;
+			// std::cout << rheader.type << '\t' << rheader.seqNum << '\t' << rheader.length << '\t' << rheader.checksum << std::endl;
 
 			if (rheader.type == 3 && rheader.seqNum == cheader.seqNum) {
 				// START or END ACKed
@@ -191,7 +191,7 @@ void sendConnection(int sockfd, int type, std::ofstream& logfile) {
 			}
 			start = std::chrono::high_resolution_clock::now();
 			logfile << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
-			std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
+			// std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
 		
 		}
 	}
@@ -281,7 +281,7 @@ int main(int argc, char *argv[]) {
 			PacketHeader header;
 			parse_header(&header, buffer);			
 			logfile << header.type << '\t' << header.seqNum << '\t' << header.length << '\t' << header.checksum << std::endl;
-			std::cout << header.type << '\t' << header.seqNum << '\t' << header.length << '\t' << header.checksum << std::endl;
+			// std::cout << header.type << '\t' << header.seqNum << '\t' << header.length << '\t' << header.checksum << std::endl;
 			if (header.type == 3) { // ACK
 				if(header.seqNum==window[0]->seqNumIndex){//expected ack
 					window[0]->hasAck=1;
@@ -315,7 +315,7 @@ int main(int argc, char *argv[]) {
 								exit(1);
 							}
 							logfile << pushHeader.type << '\t' << pushHeader.seqNum << '\t' << pushHeader.length << '\t' << pushHeader.checksum << std::endl;
-							std::cout << pushHeader.type << '\t' << pushHeader.seqNum << '\t' << pushHeader.length << '\t' << pushHeader.checksum << std::endl;
+							// std::cout << pushHeader.type << '\t' << pushHeader.seqNum << '\t' << pushHeader.length << '\t' << pushHeader.checksum << std::endl;
 							opt_element->optTime=std::chrono::high_resolution_clock::now();
 							//push new element
 							window.push_back(opt_element);
@@ -360,7 +360,7 @@ int main(int argc, char *argv[]) {
 						exit(1);
 					}
 					logfile << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
-					std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
+					// std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
 					window[i]->optTime=std::chrono::high_resolution_clock::now();				
 				}
 			}

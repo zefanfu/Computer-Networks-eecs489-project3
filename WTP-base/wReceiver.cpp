@@ -154,7 +154,7 @@ int main(int argc, char *argv[]) {
 		parse_packet(&dheader, dbuf, data);
 
 		logfile << dheader.type << '\t' << dheader.seqNum << '\t' << dheader.length << '\t' << dheader.checksum << std::endl;
-		std::cout << dheader.type << '\t' << dheader.seqNum << '\t' << dheader.length << '\t' << dheader.checksum << std::endl;
+		// std::cout << dheader.type << '\t' << dheader.seqNum << '\t' << dheader.length << '\t' << dheader.checksum << std::endl;
 
 		// check checksum
 		unsigned int checksum = crc32(data, dheader.length);
@@ -286,7 +286,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		logfile << aheader.type << '\t' << aheader.seqNum << '\t' << aheader.length << '\t' << aheader.checksum << std::endl;
-		std::cout << aheader.type << '\t' << aheader.seqNum << '\t' << aheader.length << '\t' << aheader.checksum << std::endl;
+		// std::cout << aheader.type << '\t' << aheader.seqNum << '\t' << aheader.length << '\t' << aheader.checksum << std::endl;
 
 	}
 

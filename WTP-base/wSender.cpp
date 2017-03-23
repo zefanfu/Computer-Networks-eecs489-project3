@@ -129,7 +129,7 @@ void sendWindow(std::deque<char*>& window, std::deque<std::chrono::time_point<st
 		}
 
 		logfile << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
-		std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
+		// std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
 
 		wTime.push_back(std::chrono::high_resolution_clock::now());
 	}
@@ -156,7 +156,7 @@ void sendConnection(int sockfd, int type, std::ofstream& logfile) {
 		exit(1);
 	}
 	logfile << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
-	std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
+	// std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
 
 	char rbuf[PACKET_SIZE];
 	memset(rbuf, '\0', PACKET_SIZE);
@@ -178,7 +178,7 @@ void sendConnection(int sockfd, int type, std::ofstream& logfile) {
 			parse_header(&rheader, rbuf);
 
 			logfile << rheader.type << '\t' << rheader.seqNum << '\t' << rheader.length << '\t' << rheader.checksum << std::endl;
-			std::cout << rheader.type << '\t' << rheader.seqNum << '\t' << rheader.length << '\t' << rheader.checksum << std::endl;
+			// std::cout << rheader.type << '\t' << rheader.seqNum << '\t' << rheader.length << '\t' << rheader.checksum << std::endl;
 
 			if (rheader.type == 3 && rheader.seqNum == cheader.seqNum) {
 				// START or END ACKed
@@ -194,7 +194,7 @@ void sendConnection(int sockfd, int type, std::ofstream& logfile) {
 				exit(1);
 			}
 			logfile << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
-			std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
+			// std::cout << cheader.type << '\t' << cheader.seqNum << '\t' << cheader.length << '\t' << cheader.checksum << std::endl;
 			start = std::chrono::high_resolution_clock::now();
 		}
 	}
@@ -285,7 +285,7 @@ int main(int argc, char *argv[]) {
 			parse_header(&header, buffer);
 			
 			logfile << header.type << '\t' << header.seqNum << '\t' << header.length << '\t' << header.checksum << std::endl;
-			std::cout << header.type << '\t' << header.seqNum << '\t' << header.length << '\t' << header.checksum << std::endl;
+			// std::cout << header.type << '\t' << header.seqNum << '\t' << header.length << '\t' << header.checksum << std::endl;
 
 			if (header.type == 3) { // ACK
 
